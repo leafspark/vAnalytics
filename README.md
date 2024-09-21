@@ -6,7 +6,7 @@
 [![CI/CD Status](https://img.shields.io/badge/CI%2FCD-passing-brightgreen)]()
 
 <!-- Project Info -->
-[![Powered by llama.cpp](https://img.shields.io/badge/Powered%20by-llama.cpp-green.svg)](https://github.com/ggerganov/llama.cpp)
+[![Powered by vLLM](https://img.shields.io/badge/Powered%20by-vLLM-green.svg)](https://github.com/vllm-project/vllm)
 ![GitHub top language](https://img.shields.io/github/languages/top/leafspark/vAnalytics.svg)
 [![Platform Compatibility](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-blue)]()
 [![GitHub license](https://img.shields.io/github/license/leafspark/vAnalytics.svg)](https://github.com/leafspark/vAnalytics/blob/main/LICENSE)
