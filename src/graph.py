@@ -1,22 +1,18 @@
 import asyncio
 import json
 import logging
-import numpy as np
 import os
-import pandas as pd
-import plotly.graph_objects as go
-import plotly.offline as pyo
 import sqlite3
 import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
+
+import plotly.graph_objects as go
+import plotly.offline as pyo
 from flask import Flask, render_template, request, send_file
-from functools import lru_cache
 from plotly.subplots import make_subplots
-from plotly.subplots import make_subplots
-from scipy.interpolate import make_interp_spline
 
 # Set up logging with a higher level
 logging.basicConfig(
@@ -259,7 +255,7 @@ def index():
 
     plot_div = None
     error_message = None
-    if selected_model:
+    if selected_model in valid_model_names:
         try:
             fig = create_plots(selected_model)
             if fig is not None:
@@ -273,22 +269,16 @@ def index():
                 "An error occurred while creating the plot. Please try again later."
             )
 
-        if selected_model in valid_model_names:
-            command = [
-                "python",
-                "get_data.py",
-                "--hours",
-                "24",
-                f".\\data\\{selected_model}.sqlite",
-            ]
-            result = subprocess.run(command, capture_output=True, text=True)
-        else:
-            logging.error(f"Invalid model selected: {selected_model}")
-            error_message = "Invalid model selected. Please choose a valid model."
-            result = None
-
+        command = [
+            "python",
+            "get_data.py",
+            "--hours",
+            "24",
+            f".\\data\\{selected_model}.sqlite",
+        ]
         result = subprocess.run(command, capture_output=True, text=True)
     else:
+        logging.error(f"Invalid model selected: {selected_model}")
         result = None
 
     return render_template(

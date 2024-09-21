@@ -4,10 +4,7 @@ import os
 import json
 from datetime import datetime
 import logging
-import zstd
 import sqlite3
-
-print("Starting monitor.")
 
 # Set up basic configuration for logging
 logging.basicConfig(
@@ -16,15 +13,12 @@ logging.basicConfig(
     filename="monitor.log",  # Log to a file named monitor.log
     filemode="a",
 )  # Append to the log file
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
 
-# Model information
-models = {
-    "Example-Model-22B-FP8-dynamic": "http://112.83.15.44:8883",
-    "Mistral-7B-bf16": "http://57.214.142.199:8090",
-}
+print("Starting monitor.")
+
+# Load model info
+with open("models.json", "r") as file:
+    models = json.load(file)
 
 
 def call_metrics_endpoint(model_name, base_url):

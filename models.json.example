@@ -1,0 +1,4 @@
+{
+    "Example-Model-22B-FP8-dynamic": "http://112.83.15.44:8883",
+    "Mistral-7B-bf16": "http://57.214.142.199:8090"
+}
