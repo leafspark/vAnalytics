@@ -1,0 +1,72 @@
+name: Radon Code Metrics
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '**.py'
+  pull_request:
+    paths:
+      - '**.py'
+
+jobs:
+  radon:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install radon
+      run: pip install radon
+
+    - name: Run radon
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          CHANGED_FILES=$(git ls-files '*.py')
+        else
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '\.py$' || echo "")
+        fi
+        
+        echo "Files to be analyzed:"
+        echo "$CHANGED_FILES"
+        
+        if [ -n "$CHANGED_FILES" ]; then
+          echo "Running Cyclomatic Complexity check..."
+          radon cc $CHANGED_FILES -a -s -n F --exclude "AutoGGUF.quantize_model"
+          
+          echo "Running Maintainability Index check..."
+          radon mi $CHANGED_FILES -s -n F
+        else
+          echo "No Python files to analyze."
+        fi
+      continue-on-error: true
+
+    - name: Check radon output
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          CHANGED_FILES=$(git ls-files '*.py')
+        else
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '\.py$' || echo "")
+        fi
+        
+        if [ -n "$CHANGED_FILES" ]; then
+          CC_OUTPUT=$(radon cc $CHANGED_FILES -a -s -n F --exclude "AutoGGUF.quantize_model")
+          MI_OUTPUT=$(radon mi $CHANGED_FILES -s -n F)
+          
+          if [ -n "$CC_OUTPUT" ] || [ -n "$MI_OUTPUT" ]; then
+            echo "Radon detected code complexity or maintainability issues:"
+            [ -n "$CC_OUTPUT" ] && echo "$CC_OUTPUT"
+            [ -n "$MI_OUTPUT" ] && echo "$MI_OUTPUT"
+            exit 1
+          else
+            echo "No code complexity or maintainability issues detected."
+          fi
+        else
+          echo "No Python files to analyze."
+        fi

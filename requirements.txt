@@ -1,0 +1,7 @@
+numpy~=1.26.4
+uvicorn~=0.30.6
+requests~=2.32.3
+pandas~=2.2.3
+plotly~=5.24.1
+flask~=3.0.3
+zstd~=1.5.5.1

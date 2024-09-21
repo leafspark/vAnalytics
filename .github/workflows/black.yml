@@ -1,0 +1,20 @@
+name: Black
+
+on:
+  push:
+    paths:
+      - '**.py'
+  pull_request:
+    paths:
+      - '**.py'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+      - uses: psf/black@stable
+        with:
+          options: "--check --verbose"
+          src: "./src"

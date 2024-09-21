@@ -1,0 +1,10 @@
+repos:
+- repo: https://github.com/psf/black
+  rev: 22.10.0
+  hooks:
+    - id: black
+      language_version: python3
+- repo: https://github.com/Lucas-C/pre-commit-hooks
+  rev: v1.1.9
+  hooks:
+    - id: remove-crlf
