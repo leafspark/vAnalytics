@@ -250,6 +250,7 @@ def index():
         for name in os.listdir(data_dir)
         if name.endswith(".sqlite") and os.path.isfile(os.path.join(data_dir, name))
     ]
+    valid_model_names = set(model_names)
 
     if request.method == "POST":
         selected_model = request.form.get("model_select")
@@ -272,13 +273,19 @@ def index():
                 "An error occurred while creating the plot. Please try again later."
             )
 
-        command = [
-            "python",
-            "get_data.py",
-            "--hours",
-            "24",
-            f".\\data\\{selected_model}.sqlite",
-        ]
+        if selected_model in valid_model_names:
+            command = [
+                "python",
+                "get_data.py",
+                "--hours",
+                "24",
+                f".\\data\\{selected_model}.sqlite",
+            ]
+            result = subprocess.run(command, capture_output=True, text=True)
+        else:
+            logging.error(f"Invalid model selected: {selected_model}")
+            error_message = "Invalid model selected. Please choose a valid model."
+            result = None
 
         result = subprocess.run(command, capture_output=True, text=True)
     else:
