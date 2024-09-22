@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import sqlite3
-import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,9 +13,21 @@ import plotly.offline as pyo
 from flask import Flask, render_template, request, send_file
 from plotly.subplots import make_subplots
 
-# Set up logging with a higher level
+from globals import load_env
+
+
+load_env()
+
+# Configuration
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", 4421))
+DATA_DIR = os.getenv("DATA_DIR", "./data")
+UPDATE_INTERVAL = int(os.getenv("UPDATE_INTERVAL", 30))
+LOG_LEVEL = os.getenv("LOG_LEVEL", "WARNING")
+
+# Set up logging
 logging.basicConfig(
-    level=logging.WARNING,  # Changed from DEBUG to WARNING
+    level=getattr(logging, LOG_LEVEL),
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
@@ -75,12 +86,10 @@ async def load_data_from_db(filepath):
 
 
 async def load_data():
-    data_dir = "./data"
-
     tasks = []
-    for filename in os.listdir(data_dir):
+    for filename in os.listdir(DATA_DIR):
         if filename.endswith(".sqlite"):
-            filepath = os.path.join(data_dir, filename)
+            filepath = os.path.join(DATA_DIR, filename)
             tasks.append(load_data_from_db(filepath))
 
     await asyncio.gather(*tasks)
@@ -94,7 +103,7 @@ async def load_data():
 async def background_data_loader():
     while True:
         await load_data()
-        await asyncio.sleep(30)  # Check for updates every 30 seconds
+        await asyncio.sleep(UPDATE_INTERVAL)
 
 
 def start_background_loop(loop):
@@ -235,16 +244,136 @@ def create_plots(selected_model):
     return fig
 
 
+def get_latest_rows(db_file, hours=1):
+    now = datetime.now()
+    one_hour_ago = now - timedelta(hours=hours)
+    one_hour_ago_timestamp = int(one_hour_ago.timestamp())
+
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        f"SELECT timestamp, data FROM json_data WHERE timestamp >= {one_hour_ago_timestamp} ORDER BY timestamp DESC"
+    )
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    if not rows:
+        print(
+            f"No rows found in the last {hours} hour(s). Showing info for last 5 rows:"
+        )
+        conn = sqlite3.connect(db_file)
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT timestamp, data FROM json_data ORDER BY timestamp DESC LIMIT 5"
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        for timestamp, _ in rows:
+            print(f"  {datetime.fromtimestamp(timestamp)}")
+
+    return rows
+
+
+def extract_stats(data_json):
+    try:
+        data = json.loads(data_json)
+        total_prompt_tokens = float(data["vllm:prompt_tokens_total"][0]["value"])
+        total_generation_tokens = float(
+            data["vllm:generation_tokens_total"][0]["value"]
+        )
+        total_requests = sum(
+            float(item["value"]) for item in data["vllm:request_success_total"]
+        )
+        avg_prompt_throughput = float(
+            data["vllm:avg_prompt_throughput_toks_per_s"][0]["value"]
+        )
+        avg_generation_throughput = float(
+            data["vllm:avg_generation_throughput_toks_per_s"][0]["value"]
+        )
+        gpu_cache_usage_perc = float(data["vllm:gpu_cache_usage_perc"][0]["value"])
+        num_requests_running = float(data["vllm:num_requests_running"][0]["value"])
+
+    except (KeyError, IndexError, json.JSONDecodeError) as e:
+        print(f"Error extracting stats from data: {str(e)}")
+        return None
+
+    return {
+        "total_prompt_tokens": total_prompt_tokens,
+        "total_generation_tokens": total_generation_tokens,
+        "total_requests": total_requests,
+        "avg_prompt_throughput": avg_prompt_throughput,
+        "avg_generation_throughput": avg_generation_throughput,
+        "gpu_cache_usage_perc": gpu_cache_usage_perc,
+        "num_requests_running": num_requests_running,
+    }
+
+
+def get_data(db_file, hours):
+    latest_rows = get_latest_rows(db_file, hours)
+
+    if not latest_rows:
+        print(f"No rows found for the last {hours} hour(s).")
+        return
+
+    print(f"Processing {len(latest_rows)} rows.")
+
+    valid_stats = [
+        extract_stats(data)
+        for _, data in latest_rows
+        if extract_stats(data) is not None
+    ]
+
+    if not valid_stats:
+        print("No valid statistics could be extracted from the rows.")
+        return
+
+    first_stats = valid_stats[-1]  # Oldest row
+    last_stats = valid_stats[0]  # Newest row
+
+    tokens_processed = (
+        last_stats["total_prompt_tokens"]
+        - first_stats["total_prompt_tokens"]
+        + last_stats["total_generation_tokens"]
+        - first_stats["total_generation_tokens"]
+    )
+    requests_processed = last_stats["total_requests"] - first_stats["total_requests"]
+
+    avg_prompt_throughput = sum(
+        stat["avg_prompt_throughput"] for stat in valid_stats
+    ) / len(valid_stats)
+    avg_generation_throughput = sum(
+        stat["avg_generation_throughput"] for stat in valid_stats
+    ) / len(valid_stats)
+    avg_num_requests_running = sum(
+        stat["num_requests_running"] for stat in valid_stats
+    ) / len(valid_stats)
+    avg_gpu_cache_usage_perc = sum(
+        stat["gpu_cache_usage_perc"] for stat in valid_stats
+    ) / len(valid_stats)
+
+    return (
+        f"\nStats for the last {hours} hour(s):\n"
+        f"Tokens processed: {tokens_processed:,.0f}\n"
+        f"Requests processed: {requests_processed:,.0f}\n"
+        f"Average prompt throughput: {avg_prompt_throughput:.2f} tokens/s\n"
+        f"Average generation throughput: {avg_generation_throughput:.2f} tokens/s\n"
+        f"Average tokens per request: {tokens_processed/requests_processed:,.2f} tokens\n"
+        f"Average number of requests running: {avg_num_requests_running:.2f} requests\n"
+        f"Average GPU cache usage percent: {avg_gpu_cache_usage_perc * 100:.2f}%"
+    )
+
+
 app = Flask(__name__)
 
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    data_dir = "./data"
     model_names = [
         name[:-7]
-        for name in os.listdir(data_dir)
-        if name.endswith(".sqlite") and os.path.isfile(os.path.join(data_dir, name))
+        for name in os.listdir(DATA_DIR)
+        if name.endswith(".sqlite") and os.path.isfile(os.path.join(DATA_DIR, name))
     ]
     valid_model_names = set(model_names)
 
@@ -269,14 +398,7 @@ def index():
                 "An error occurred while creating the plot. Please try again later."
             )
 
-        command = [
-            "python",
-            "get_data.py",
-            "--hours",
-            "24",
-            f".\\data\\{selected_model}.sqlite",
-        ]
-        result = subprocess.run(command, capture_output=True, text=True)
+        result = get_data(f"{DATA_DIR}/{selected_model}.sqlite", 24)
     else:
         logging.error(f"Invalid model selected: {selected_model}")
         result = None
@@ -286,7 +408,7 @@ def index():
         plot_div=plot_div,
         model_name=selected_model,
         model_names=model_names,
-        result=result.stdout if result else None,
+        result=result,
         error_message=error_message,
     )
 
@@ -317,4 +439,4 @@ if __name__ == "__main__":
     t.start()
 
     asgi_app = WsgiToAsgi(app)
-    uvicorn.run(asgi_app, host="0.0.0.0", port=4421)
+    uvicorn.run(asgi_app, host=HOST, port=PORT)

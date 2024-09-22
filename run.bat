@@ -1,0 +1,6 @@
+@echo off
+echo Starting monitor...
+start python ./src/monitor.py
+echo Starting web UI...
+start python ./src/graph.py
+pause

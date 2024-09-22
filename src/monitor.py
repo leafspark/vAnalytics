@@ -6,6 +6,8 @@ from datetime import datetime
 import logging
 import sqlite3
 
+from globals import load_env
+
 # Set up basic configuration for logging
 logging.basicConfig(
     level=logging.DEBUG,
@@ -16,8 +18,17 @@ logging.basicConfig(
 
 print("Starting monitor.")
 
+load_env()
+
+# Configuration
+USER_AGENT = os.getenv(
+    "USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+)
+MODEL_CONFIG = os.getenv("MODEL_CONFIG", "./models.json")
+
 # Load model info
-with open("models.json", "r") as file:
+with open(MODEL_CONFIG, "r") as file:
     models = json.load(file)
 
 
@@ -25,9 +36,7 @@ def call_metrics_endpoint(model_name, base_url):
     url = f"{base_url}/metrics"
     logging.debug(f"Calling metrics endpoint: {url}")
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-        }
+        headers = {"User-Agent": USER_AGENT}
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         logging.debug(f"Received successful response from {url}")
