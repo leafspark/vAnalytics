@@ -1,6 +1,9 @@
 # Ignore everything
 *
 
+# Ignore .idea
+/.idea
+
 # Don't ignore directories, so we can recurse into them
 !*/
 
@@ -21,6 +24,9 @@
 
 # Don't ignore Python files in src directory
 !src/**/*.py
+
+# Don't ignore templates
+!templates/**/*.html
 
 # Don't ignore requirements.txt in root
 !requirements.txt
